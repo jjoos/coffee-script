@@ -318,7 +318,7 @@ exports.Block = class Block extends Base
   # It would be better not to generate them in the first place, but for now,
   # clean up obvious double-parentheses.
   compileRoot: (o) ->
-    o.indent  = if o.bare then '' else TAB
+    o.indent  = ''
     o.level   = LEVEL_TOP
     @spaced   = yes
     o.scope   = new Scope null, this, null, o.referencedVars ? []
@@ -326,19 +326,7 @@ exports.Block = class Block extends Base
     # end up being declared on this block.
     o.scope.parameter name for name in o.locals or []
     prelude   = []
-    unless o.bare
-      preludeExps = for exp, i in @expressions
-        break unless exp.unwrap() instanceof Comment
-        exp
-      rest = @expressions[preludeExps.length...]
-      @expressions = preludeExps
-      if preludeExps.length
-        prelude = @compileNode merge(o, indent: '')
-        prelude.push @makeCode "\n"
-      @expressions = rest
-    fragments = @compileWithDeclarations o
-    return fragments if o.bare
-    [].concat prelude, @makeCode("(function() {\n"), fragments, @makeCode("\n}).call(this);\n")
+    @compileWithDeclarations o
 
   # Compile the expressions body for the contents of a function, with
   # declarations of all inner variables pushed up to the top.
