@@ -665,9 +665,6 @@ exports.Call = class Call extends Base
   # Compile a vanilla function call.
   compileNode: (o) ->
     @variable?.front = @front
-    compiledArray = Splat.compileSplattedArray o, @args, true
-    if compiledArray.length
-      return @compileSplat o, compiledArray
     compiledArgs = []
     for arg, argIndex in @args
       if argIndex then compiledArgs.push @makeCode ", "
@@ -980,8 +977,6 @@ exports.Arr = class Arr extends Base
   compileNode: (o) ->
     return [@makeCode '[]'] unless @objects.length
     o.indent += TAB
-    answer = Splat.compileSplattedArray o, @objects
-    return answer if answer.length
 
     answer = []
     compiledObjs = (obj.compileToFragments o, LEVEL_LIST for obj in @objects)
@@ -1388,15 +1383,8 @@ exports.Code = class Code extends Base
     delete o.isExistentialEquals
     params = []
     exprs  = []
-    for param in @params when param not instanceof Expansion
-      o.scope.parameter param.asReference o
-    for param in @params when param.splat or param instanceof Expansion
-      for p in @params when p not instanceof Expansion and p.name.value
-        o.scope.add p.name.value, 'var', yes
-      splats = new Assign new Value(new Arr(p.asReference o for p in @params)),
-                          new Value new Literal 'arguments'
-      break
     for param in @params
+      o.scope.parameter param.asReference o
       if param.isComplex()
         val = ref = param.asReference o
         val = new Op '?', ref, param.value if param.value
@@ -1407,9 +1395,8 @@ exports.Code = class Code extends Base
           lit = new Literal ref.name.value + ' == null'
           val = new Assign new Value(param.name), param.value, '='
           exprs.push new If lit, val
-      params.push ref unless splats
+      params.push ref
     wasEmpty = @body.isEmpty()
-    exprs.unshift splats if splats
     @body.expressions.unshift exprs... if exprs.length
     for p, i in params
       params[i] = p.compileToFragments o
@@ -1455,7 +1442,9 @@ exports.Param = class Param extends Base
   children: ['name', 'value']
 
   compileToFragments: (o) ->
-    @name.compileToFragments o, LEVEL_LIST
+    name = @name.compileToFragments o, LEVEL_LIST
+    name.unshift @makeCode "..." if @.splat
+    name
 
   asReference: (o) ->
     return @reference if @reference
@@ -1524,36 +1513,12 @@ exports.Splat = class Splat extends Base
     @name.assigns name
 
   compileToFragments: (o) ->
-    @name.compileToFragments o
+    name = @name.compileToFragments o
+    name.unshift @makeCode "..."
+
+    name
 
   unwrap: -> @name
-
-  # Utility function that converts an arbitrary number of elements, mixed with
-  # splats, to a proper array.
-  @compileSplattedArray: (o, list, apply) ->
-    index = -1
-    continue while (node = list[++index]) and node not instanceof Splat
-    return [] if index >= list.length
-    if list.length is 1
-      node = list[0]
-      fragments = node.compileToFragments o, LEVEL_LIST
-      return fragments if apply
-      return [].concat node.makeCode("#{ utility 'slice', o }.call("), fragments, node.makeCode(")")
-    args = list[index..]
-    for node, i in args
-      compiledNode = node.compileToFragments o, LEVEL_LIST
-      args[i] = if node instanceof Splat
-      then [].concat node.makeCode("#{ utility 'slice', o }.call("), compiledNode, node.makeCode(")")
-      else [].concat node.makeCode("["), compiledNode, node.makeCode("]")
-    if index is 0
-      node = list[0]
-      concatPart = (node.joinFragmentArrays args[1..], ', ')
-      return args[0].concat node.makeCode(".concat("), concatPart, node.makeCode(")")
-    base = (node.compileToFragments o, LEVEL_LIST for node in list[...index])
-    base = list[0].joinFragmentArrays base, ', '
-    concatPart = list[index].joinFragmentArrays args, ', '
-    [..., last] = list
-    [].concat list[0].makeCode("["), base, list[index].makeCode("].concat("), concatPart, last.makeCode(")")
 
 #### Expansion
 
