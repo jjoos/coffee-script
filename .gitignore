@@ -1,7 +1,7 @@
 raw
 presentation
-test.coffee
 test.litcoffee
+test.js
 parser.output
 test/fixtures/underscore
 test/*.js
