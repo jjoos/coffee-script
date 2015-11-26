@@ -186,7 +186,7 @@ grammar =
     o 'RETURN',                                 -> new Return
   ]
 
-  # A block comment.
+  # A comment.
   Comment: [
     o 'HERECOMMENT',                            -> new Comment $1
   ]
