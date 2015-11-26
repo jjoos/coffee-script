@@ -1368,14 +1368,6 @@ exports.Code = class Code extends Base
     if @bound and o.scope.method?.bound
       @context = o.scope.method.context
 
-    # Handle bound functions early.
-    if @bound and not @context
-      @context = '_this'
-      wrapper = new Code [new Param new Literal @context], new Block [this]
-      boundfunc = new Call(wrapper, [new Literal 'this'])
-      boundfunc.updateLocationDataIfMissing @locationData
-      return boundfunc.compileNode(o)
-
     o.scope         = del(o, 'classScope') or @makeScope o.scope
     o.scope.shared  = del(o, 'sharedScope')
     o.indent        += TAB
@@ -1405,19 +1397,38 @@ exports.Code = class Code extends Base
     @eachParamName (name, node) ->
       node.error "multiple parameters named #{name}" if name in uniqs
       uniqs.push name
-    @body.makeReturn() unless wasEmpty or @noReturn
-    code = 'function'
-    code += '*' if @isGenerator
-    code += ' ' + @name if @ctor
-    code += '('
+    @body.makeReturn() unless wasEmpty or @noReturn or (@bound and @body.expressions.length == 1)
+    if @bound
+      code = '('
+    else
+      code = 'function'
+      code += '*' if @isGenerator
+      code += ' ' + @name if @ctor
+      code += '('
     answer = [@makeCode(code)]
     for p, i in params
       if i then answer.push @makeCode ", "
-      answer.push p...
-    answer.push @makeCode ') {'
-    answer = answer.concat(@makeCode("\n"), @body.compileWithDeclarations(o), @makeCode("\n#{@tab}")) unless @body.isEmpty()
-    answer.push @makeCode '}'
 
+      answer.push p...
+    if @bound
+      answer.push @makeCode ') =>'
+
+      answer.push @makeCode " {\n" if @body.expressions.length != 1
+
+      body = @body.compileWithDeclarations(o)
+      if @body.expressions.length == 1
+        # Remove not needed identation and change into a single space
+        body.shift()
+        body.unshift(@makeCode ' ')
+        # remove semi colon
+        body.pop()
+
+      answer = answer.concat(body)
+      answer.push @makeCode "\n#{@tab}" if @body.expressions.length != 1
+    else
+      answer.push @makeCode ') {'
+      answer = answer.concat(@makeCode("\n"), @body.compileWithDeclarations(o), @makeCode("\n#{@tab}")) unless @body.isEmpty()
+      answer.push @makeCode '}'
     return [@makeCode(@tab), answer...] if @ctor
     if @front or (o.level >= LEVEL_ACCESS) then @wrapInBraces answer else answer
 
